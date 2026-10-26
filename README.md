@@ -24,4 +24,4 @@ To read the privileged command without running it:
 
 Turn off Launch at Login in the menu if it is on, then:
 
-    pkill -x SleepToggle; rm -rf ~/Applications/SleepToggle.app; sudo rm /etc/sudoers.d/sleep-toggle
+    pkill -x SleepToggle; sudo pmset -a disablesleep 0; rm -rf ~/Applications/SleepToggle.app; sudo rm /etc/sudoers.d/sleep-toggle

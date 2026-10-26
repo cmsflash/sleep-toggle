@@ -11,6 +11,7 @@ codesign --force --sign - "$app"
 codesign --verify --strict --verbose=2 "$app"
 if [[ "${1:-}" == "--install" ]]; then
     pkill -x SleepToggle || true
+    while pgrep -x SleepToggle >/dev/null; do sleep 0.2; done
     mkdir -p "$HOME/Applications"
     rm -rf "$HOME/Applications/SleepToggle.app"
     ditto "$app" "$HOME/Applications/SleepToggle.app"

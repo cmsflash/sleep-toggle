@@ -70,17 +70,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Quit Sleep Toggle", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         refresh()
         timer = Timer.scheduledTimer(timeInterval: 10, target: self, selector: #selector(refresh), userInfo: nil, repeats: true)
-        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(refresh), name: NSWorkspace.didWakeNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
+        }
     }
 
     @objc func clicked() {
-        let event = NSApp.currentEvent
+        let event = NSApp.currentEvent.flatMap {
+            [.leftMouseUp, .rightMouseUp].contains($0.type) && ProcessInfo.processInfo.systemUptime - $0.timestamp < 1 ? $0 : nil
+        }
         if event?.type == .rightMouseUp || event?.modifierFlags.contains(.option) == true || event?.modifierFlags.contains(.control) == true {
             loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
-            // A menu attached permanently would swallow left clicks, so attach it only for this click.
-            item.menu = menu
-            item.button?.performClick(nil)
-            item.menu = nil
+            if let button = item.button {
+                menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
+            }
+        } else if disabled == nil {
+            refresh()
         } else {
             toggle()
         }
@@ -92,9 +97,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let result = run("/usr/bin/sudo", ["-n", pmset, "-a", "disablesleep", "\(target)"])
         if result.status == 0 {
             log.notice("set disablesleep \(target) via sudo -n")
-        } else {
+        } else if !FileManager.default.fileExists(atPath: rulePath) {
             log.notice("sudo -n failed: \(result.output, privacy: .public); asking for admin to install \(rulePath, privacy: .public)")
             installRule(target: target)
+        } else {
+            log.error("sudo -n failed with \(rulePath, privacy: .public) present: \(result.output, privacy: .public)")
         }
         refresh()
     }
@@ -114,12 +121,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if state != disabled { log.notice("SleepDisabled is now \(state.map { $0 ? "1" : "0" } ?? "unknown", privacy: .public)") }
         disabled = state
         let (symbol, label, action) = switch state {
-        case true?: ("cup.and.saucer.fill", "Sleep disabled", "allow")
-        case false?: ("moon.zzz", "Sleep allowed", "disable")
-        case nil: ("exclamationmark.triangle", "Sleep state unknown", "retry")
+        case true?: ("cup.and.saucer.fill", "Sleep disabled", "allow sleep")
+        case false?: ("moon.zzz", "Sleep allowed", "disable sleep")
+        case nil: ("exclamationmark.triangle", "Sleep state unknown", "re-read it")
         }
         item.button?.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
-        item.button?.toolTip = "Sleep Toggle: \(label). Click to \(action) sleep; right-click for menu."
+        item.button?.toolTip = "Sleep Toggle: \(label). Click to \(action); right-click for menu."
     }
 
     @objc func toggleLogin() {
